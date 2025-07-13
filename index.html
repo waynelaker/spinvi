@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>SpinVI</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem;
+      background: #f9f9f9;
+    }
+
+    h1 {
+      font-size: 2rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .instruction {
+      font-size: 0.9rem;
+      margin-bottom: 1.2rem;
+      color: #666;
+    }
+
+    .wheels-container {
+      display: flex;
+      gap: 0.3rem;
+      margin-bottom: 2rem;
+    }
+
+    .wheel {
+      background: white;
+      border: 2px solid #ccc;
+      border-radius: 0.8rem;
+      padding: 0.5rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 60px;
+      cursor: grab;
+      transition: transform 0.2s;
+    }
+
+    .wheel.dragging {
+      opacity: 0.5;
+      transform: scale(1.05);
+    }
+
+    .drop-target {
+      width: 6px;
+      height: 100px;
+      background-color: dodgerblue;
+      border-radius: 3px;
+      margin: 0 0.1rem;
+      align-self: center;
+    }
+
+    .wheel-letters {
+      height: 120px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .letter {
+      font-size: 1.1rem;
+      height: 20px;
+    }
+
+    button {
+      margin: 0.2rem;
+      padding: 0.2rem 0.5rem;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+
+    .words-output {
+      font-family: monospace;
+      font-size: 1.2rem;
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🔄 SpinVI</h1>
+  <div class="instruction">💡 Drag wheels to reorder. Click ↑/↓ to spin letters.</div>
+
+  <div class="wheels-container" id="wheels" draggable="false"></div>
+  <div class="words-output" id="output"></div>
+
+  <script>
+    const data = [
+      ["or", "it", "or", "he", "gr", "te"], // Wheel 0
+      ["ra", "ta", "su", "ad", "un", "al"], // Wheel 1
+      ["bi", "il", "it", "er", "ed", "on"], // Wheel 2
+    ];
+
+    let wheelOrder = [0, 1, 2];
+    let positions = [0, 0, 0];
+
+    const wheelsContainer = document.getElementById('wheels');
+    const output = document.getElementById('output');
+
+    let dragStartIndex = null;
+    let dropTargetIndex = null;
+
+    function renderWheels() {
+      wheelsContainer.innerHTML = '';
+
+      for (let i = 0; i <= wheelOrder.length; i++) {
+
+        if (i === dropTargetIndex) {
+        const dropBar = document.createElement("div");
+        dropBar.className = "drop-target";
+        dropBar.dataset.dropIndex = i;
+
+        dropBar.addEventListener("dragover", (e) => {
+            e.preventDefault(); // <-- Required
+            e.dataTransfer.dropEffect = "move"; // <-- Fixes cursor
+        });
+
+        dropBar.addEventListener("dragenter", (e) => {
+            e.preventDefault();
+            dropTargetIndex = i;
+            renderWheels();
+        });
+
+        dropBar.addEventListener("drop", (e) => {
+            e.preventDefault();
+            handleDrop(i); // Call function with explicit drop index
+        });
+
+        wheelsContainer.appendChild(dropBar);
+        }
+        if (i < wheelOrder.length) {
+          const wheelIdx = wheelOrder[i];
+          const wheel = document.createElement('div');
+          wheel.className = 'wheel';
+          wheel.draggable = true;
+          wheel.dataset.index = i;
+
+          wheel.addEventListener('dragstart', dragStart);
+          wheel.addEventListener('dragover', dragOver);
+          wheel.addEventListener('dragenter', dragEnter);
+          wheel.addEventListener('drop', drop);
+          wheel.addEventListener('dragend', dragEnd);
+
+          const upBtn = document.createElement('button');
+          upBtn.textContent = '↑';
+          upBtn.onclick = () => rotate(i, -1);
+          wheel.appendChild(upBtn);
+
+          const wheelLetters = document.createElement('div');
+          wheelLetters.className = 'wheel-letters';
+          for (let j = 0; j < 6; j++) {
+            const idx = (positions[i] + j) % 6;
+            const letter = document.createElement('div');
+            letter.className = 'letter';
+            letter.textContent = data[wheelIdx][idx];
+            wheelLetters.appendChild(letter);
+          }
+          wheel.appendChild(wheelLetters);
+
+          const downBtn = document.createElement('button');
+          downBtn.textContent = '↓';
+          downBtn.onclick = () => rotate(i, 1);
+          wheel.appendChild(downBtn);
+
+          wheelsContainer.appendChild(wheel);
+        }
+      }
+
+      renderWords();
+    }
+
+    function rotate(wheelPos, delta) {
+      positions[wheelPos] = (positions[wheelPos] - delta + 6) % 6; // corrected direction
+      renderWheels();
+    }
+
+    function renderWords() {
+      let words = [];
+      for (let i = 0; i < 6; i++) {
+        const parts = wheelOrder.map((wheelIdx, wheelPos) => {
+          const pos = (positions[wheelPos] + i) % 6;
+          return data[wheelIdx][pos];
+        });
+        words.push(parts.join(''));
+      }
+      output.innerHTML = words.map(w => `🔤 ${w}`).join('<br>');
+    }
+
+    function dragStart(e) {
+        dragStartIndex = +e.currentTarget.dataset.index;
+        dropTargetIndex = null;
+
+        // Required for drop to work in most browsers:
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", "dummy");
+
+        e.currentTarget.classList.add("dragging");
+    }
+
+
+    function dragOver(e) {
+      e.preventDefault();
+    }
+
+    function dragEnter(e) {
+      const currentIndex = +this.dataset.index;
+      dropTargetIndex = currentIndex < dragStartIndex ? currentIndex : currentIndex + 1;
+      renderWheels();
+    }
+
+    function drop(e) {
+      if (dropTargetIndex === null) return;
+
+      const draggedWheel = wheelOrder[dragStartIndex];
+      const draggedPos = positions[dragStartIndex];
+
+      wheelOrder.splice(dragStartIndex, 1);
+      positions.splice(dragStartIndex, 1);
+
+      wheelOrder.splice(dropTargetIndex, 0, draggedWheel);
+      positions.splice(dropTargetIndex, 0, draggedPos);
+
+      dragStartIndex = null;
+      dropTargetIndex = null;
+      renderWheels();
+    }
+
+    function dragEnd() {
+      const wheels = document.querySelectorAll('.wheel');
+      wheels.forEach(w => w.classList.remove('dragging'));
+      dropTargetIndex = null;
+      renderWheels();
+    }
+
+    function handleDrop(index) {
+        if (dragStartIndex === null || index === null) return;
+
+        const draggedWheel = wheelOrder[dragStartIndex];
+        const draggedPos = positions[dragStartIndex];
+
+        // Remove the dragged wheel
+        wheelOrder.splice(dragStartIndex, 1);
+        positions.splice(dragStartIndex, 1);
+
+        // Adjust drop index if needed
+        const adjustedDrop = dragStartIndex < index ? index - 1 : index;
+
+        // Insert at new location
+        wheelOrder.splice(adjustedDrop, 0, draggedWheel);
+        positions.splice(adjustedDrop, 0, draggedPos);
+
+        dragStartIndex = null;
+        dropTargetIndex = null;
+        renderWheels();
+    }
+
+
+    document.addEventListener("dragover", e => {
+        e.preventDefault(); // Avoid default blocking
+    });
+    document.addEventListener("drop", e => {
+        e.preventDefault(); // Prevent full-page redirect
+    });
+
+
+    renderWheels();
+  </script>
+
+</body>
+</html>
